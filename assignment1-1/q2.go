@@ -3,6 +3,7 @@ package cos418_hw1_1
 import (
 	"bufio"
 	"io"
+	"os"
 	"strconv"
 )
 
@@ -10,7 +11,11 @@ import (
 // You should only output to `out` once.
 // Do NOT modify function signature.
 func sumWorker(nums chan int, out chan int) {
-	// TODO: implement me
+	sum := 0
+	for num := range nums {
+		sum += num
+	}
+	out <- sum
 	// HINT: use for loop over `nums`
 }
 
@@ -20,10 +25,42 @@ func sumWorker(nums chan int, out chan int) {
 // You should use `checkError` to handle potential errors.
 // Do NOT modify function signature.
 func sum(num int, fileName string) int {
-	// TODO: implement me
+	file, error := os.Open(fileName)
+	if error != nil {
+		checkError(error)
+		return 0
+	}
+	defer file.Close()
+
+	nums, error := readInts(file)
+	if error != nil {
+		checkError(error)
+		return 0
+	}
+
+	var numsChannel chan int = make(chan int)
+	var sumsChannel chan int = make(chan int)
+
+	for i := 0; i < num; i++ {
+		go sumWorker(numsChannel, sumsChannel)
+	}
+
+	for _, n := range nums {
+		numsChannel <- n
+	}
+	close(numsChannel)
+
+	// Collect sums from worker goroutines
+	totalSum := 0
+	for i := 0; i < num; i++ {
+		sum := <-sumsChannel
+		totalSum += sum
+	}
+
+	close(sumsChannel)
+	return totalSum
 	// HINT: use `readInts` and `sumWorkers`
 	// HINT: used buffered channels for splitting numbers between workers
-	return 0
 }
 
 // Read a list of integers separated by whitespace from `r`.
