@@ -1,5 +1,11 @@
 package mapreduce
 
+import (
+	"encoding/json"
+	"os"
+	"sort"
+)
+
 // doReduce does the job of a reduce worker: it reads the intermediate
 // key/value pairs (produced by the map phase) for this task, sorts the
 // intermediate key/value pairs by key, calls the user-defined reduce function
@@ -33,4 +39,55 @@ func doReduce(
 	// file.Close()
 	//
 	// Use checkError to handle errors.
+
+	// Create a map to store intermediate key-value pairs
+	intermediate := make(map[string][]string)
+
+	// Read intermediate key-value pairs from map tasks
+	for m := 0; m < nMap; m++ {
+		intermediateFile := reduceName(jobName, m, reduceTaskNumber)
+
+		// Open the intermediate file for reading
+		file, err := os.Open(intermediateFile)
+		if err != nil {
+			checkError(err)
+			continue
+		}
+		defer file.Close()
+
+		// Create a JSON decoder for the intermediate file
+		decoder := json.NewDecoder(file)
+
+		// Decode and collect key-value pairs
+		var kv KeyValue
+		for {
+			if err := decoder.Decode(&kv); err != nil {
+				break // Reached end of file
+			}
+			intermediate[kv.Key] = append(intermediate[kv.Key], kv.Value)
+		}
+	}
+
+	// Create the output file for this reduce task
+	outputFile, err := os.Create(mergeName(jobName, reduceTaskNumber))
+	if err != nil {
+		checkError(err)
+		return
+	}
+	defer outputFile.Close()
+
+	// Sort keys
+	var keys []string
+	for key := range intermediate {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	// Call the user-defined reduce function and write the result to the output file
+	enc := json.NewEncoder(outputFile)
+	for _, key := range keys {
+		result := reduceF(key, intermediate[key])
+		enc.Encode(KeyValue{key, result})
+	}
+
 }
