@@ -40,54 +40,50 @@ func doReduce(
 	//
 	// Use checkError to handle errors.
 
-	// Create a map to store intermediate key-value pairs
 	intermediate := make(map[string][]string)
 
-	// Read intermediate key-value pairs from map tasks
+	//reading intermediate key-value pairs
 	for m := 0; m < nMap; m++ {
-		intermediateFile := reduceName(jobName, m, reduceTaskNumber)
+		interfile := reduceName(jobName, m, reduceTaskNumber)
 
-		// Open the intermediate file for reading
-		file, err := os.Open(intermediateFile)
+		file, err := os.Open(interfile)
 		if err != nil {
 			checkError(err)
 			continue
 		}
 		defer file.Close()
 
-		// Create a JSON decoder for the intermediate file
+		//JSON decoder
 		decoder := json.NewDecoder(file)
 
-		// Decode and collect key-value pairs
-		var kv KeyValue
+		var KV KeyValue
 		for {
-			if err := decoder.Decode(&kv); err != nil {
-				break // Reached end of file
+			if err := decoder.Decode(&KV); err != nil {
+				break 
 			}
-			intermediate[kv.Key] = append(intermediate[kv.Key], kv.Value)
+			intermediate[KV.Key] = append(intermediate[KV.Key], KV.Value)
 		}
 	}
 
-	// Create the output file for this reduce task
-	outputFile, err := os.Create(mergeName(jobName, reduceTaskNumber))
+	//Creating output file 
+	outfile, err := os.Create(mergeName(jobName, reduceTaskNumber))
 	if err != nil {
 		checkError(err)
 		return
 	}
-	defer outputFile.Close()
+	defer outfile.Close()
 
-	// Sort keys
+	//Sort keys
 	var keys []string
 	for key := range intermediate {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 
-	// Call the user-defined reduce function and write the result to the output file
-	enc := json.NewEncoder(outputFile)
+	enc := json.NewEncoder(outfile)
 	for _, key := range keys {
-		result := reduceF(key, intermediate[key])
-		enc.Encode(KeyValue{key, result})
+		res := reduceF(key, intermediate[key])
+		enc.Encode(KeyValue{key, res})
 	}
 
 }
