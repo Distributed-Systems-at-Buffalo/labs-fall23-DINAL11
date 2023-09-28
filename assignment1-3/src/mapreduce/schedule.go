@@ -21,46 +21,50 @@ func (mr *Master) schedule(phase jobPhase) {
 	// multiple tasks.
 	//
 	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
+
+	// Initialize  number of tasks
+	x := 0
 	// Create a channel to receive task completion signals.
-	taskCompleted := make(chan bool)
+	taskcomchannel := make(chan bool, ntasks)
 
-	// Loop through all the tasks and assign them to available workers.
-	for taskNumber := 0; taskNumber < ntasks; taskNumber++ {
-		go func(taskNum int) {
+	for i := 0; i < ntasks; i++ {
+		go func(numtask int) {
 			for {
-				worker := <-mr.registerChannel // Wait for a registered worker.
+				// Wait for a registered worker.
+				regworker := <-mr.registerChannel
 
-				// Construct the DoTaskArgs for the task.
+				//DoTaskArgs for task.
 				args := DoTaskArgs{
 					JobName:       mr.jobName,
-					File:          mr.files[taskNum],
+					File:          mr.files[numtask],
 					Phase:         phase,
-					TaskNumber:    taskNum,
+					TaskNumber:    numtask,
 					NumOtherPhase: nios,
 				}
 
-				// Send the task to the worker.
-				ok := call(worker, "Worker.DoTask", &args, new(struct{}))
-				if ok {
-					// If the task completed successfully, notify the channel.
-					taskCompleted <- true
+				// initiates a task on worker using an RPC
+				rpccall := call(regworker, "Worker.DoTask", &args, new(struct{}))
+				if rpccall {
+					// notify the channel of task completion.
+					taskcomchannel <- true
 
-					// Return the worker to the pool.
+					// return the worker by sending it to the register channel.
 					go func() {
-						mr.registerChannel <- worker
+						mr.registerChannel <- regworker
 					}()
 					break
 				}
 			}
-		}(taskNumber)
+		}(i)
 	}
 
 	// Wait for all tasks to complete.
-	for i := 0; i < ntasks; i++ {
-		<-taskCompleted
+	for x < ntasks {
+		<-taskcomchannel
+		x++
 	}
 
-	close(taskCompleted) // Close the taskCompleted channel when done.
+	close(taskcomchannel)
 
 	debug("Schedule: %v phase done\n", phase)
 }

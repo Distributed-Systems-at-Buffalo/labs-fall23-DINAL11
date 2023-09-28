@@ -14,24 +14,22 @@ import "mapreduce"
 // key/value pairs, each represented by a mapreduce.KeyValue.
 func mapF(document string, value string) (res []mapreduce.KeyValue) {
 	// TODO: you should complete this to do the inverted index challenge
-	// Split the document contents into words
-	words := strings.Fields(value) // Split the document into words
+	// Split contents into words
+	words := strings.Fields(value)
 
-	// Create a set to store unique words in the document
-	wordSet := make(map[string]struct{})
+	uniquewords := make(map[string]struct{})
 
-	// Iterate through words and add them to the set
+	// add words to uniquewords
 	for _, word := range words {
-		wordSet[word] = struct{}{}
+		uniquewords[word] = struct{}{}
 	}
 
-	// Convert the set into a slice of unique words
-	uniqueWords := make([]string, 0, len(wordSet))
-	for word := range wordSet {
+	uniqueWords := make([]string, 0, len(uniquewords))
+	for word := range uniquewords {
 		uniqueWords = append(uniqueWords, word)
 	}
 
-	// Generate key-value pairs with words as keys and the document name as value
+	// Generate key-value pairs, words: keys and document: values
 	for _, word := range uniqueWords {
 		res = append(res, mapreduce.KeyValue{Key: word, Value: document})
 	}
@@ -44,14 +42,14 @@ func mapF(document string, value string) (res []mapreduce.KeyValue) {
 // should be a single output value for that key.
 func reduceF(key string, values []string) string {
 	// TODO: you should complete this to do the inverted index challenge
-	// Sort the list of document names
+
 	sort.Strings(values)
 
-	// Combine document names into a comma-separated string
-	documents := strings.Join(values, ",")
+	// document names in comma-separated strings
+	documentnames := strings.Join(values, ",")
 
-	// Format the output as "word: #documents documents"
-	result := fmt.Sprintf("%s: %d %s", key, len(values), documents)
+	// Format the output as "word: #documents documents,sorted,and,separated,by,commas,"
+	result := fmt.Sprintf("%s: %d %s,%s", key, len(values), documentnames)
 
 	return result
 }
