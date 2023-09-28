@@ -1,3 +1,4 @@
+ls
 # Assignment 1 (Part 3): Distributed Map/Reduce
 
 <h2>Introduction</h2>

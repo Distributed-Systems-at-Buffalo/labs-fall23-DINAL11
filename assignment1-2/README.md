@@ -7,7 +7,7 @@
   about fault tolerance in distributed systems. For part 2, you
   will work with a sequential Map/Reduce implementation and write a
   sample program that uses it.
-
+ 
   The interface to the library is similar to the one described in
   the original MapReduce paper (suggested reading).
 </p>
