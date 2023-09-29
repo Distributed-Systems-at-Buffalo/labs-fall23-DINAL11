@@ -4,6 +4,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode"
 )
 import "fmt"
 import "mapreduce"
@@ -14,26 +15,35 @@ import "mapreduce"
 // key/value pairs, each represented by a mapreduce.KeyValue.
 func mapF(document string, value string) (res []mapreduce.KeyValue) {
 	// TODO: you should complete this to do the inverted index challenge
-	// Split contents into words
-	words := strings.Fields(value)
+	var contents []string
+	x := -1
 
-	uniquewords := make(map[string]struct{})
-
-	// add words to uniquewords
-	for _, word := range words {
-		uniquewords[word] = struct{}{}
+	for i, j := range value {
+		if unicode.IsLetter(j) {
+			if x == -1 {
+				x = i
+			}
+		} else {
+			// If a non-letter character is found and there was a word before it,
+			// extract the word and add it to the contents slice
+			if x != -1 {
+				contents = append(contents, value[x:i])
+				x = -1
+			}
+		}
 	}
 
-	uniqueWords := make([]string, 0, len(uniquewords))
-	for word := range uniquewords {
-		uniqueWords = append(uniqueWords, word)
+	// If the last word extends to the end of the document, extract and add it
+
+	if x != -1 {
+		contents = append(contents, value[x:])
 	}
 
-	// Generate key-value pairs, words: keys and document: values
-	for _, word := range uniqueWords {
+	for _, word := range contents {
+		// Append a KeyValue struct with the word as the key and document as the value
+
 		res = append(res, mapreduce.KeyValue{Key: word, Value: document})
 	}
-
 	return res
 }
 
@@ -42,15 +52,23 @@ func mapF(document string, value string) (res []mapreduce.KeyValue) {
 // should be a single output value for that key.
 func reduceF(key string, values []string) string {
 	// TODO: you should complete this to do the inverted index challenge
-
 	sort.Strings(values)
 
-	// document names in comma-separated strings
-	documentnames := strings.Join(values, ",")
+	//duplicates document names map.
+	dupdoc := make(map[string]bool)
+	var unidoc []string
+
+	for _, doc := range values {
+		if !dupdoc[doc] {
+			dupdoc[doc] = true
+			unidoc = append(unidoc, doc)
+		}
+	}
+	// Join unique document names into a comma-separated string
+	documentnames := strings.Join(unidoc, ",")
 
 	// Format the output as "word: #documents documents,sorted,and,separated,by,commas,"
-	result := fmt.Sprintf("%s: %d %s,%s", key, len(values), documentnames)
-
+	result := fmt.Sprintf("%d %s", len(unidoc), documentnames)
 	return result
 }
 
