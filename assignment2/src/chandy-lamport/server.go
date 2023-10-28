@@ -2,6 +2,7 @@ package chandy_lamport
 
 import (
 	"log"
+	"strconv"
 )
 
 // The main participant of the distributed snapshot protocol.
@@ -19,7 +20,7 @@ type Server struct {
 	snapshotstates map[int]*SnapshotState
 	//snapshotMessages []*SnapshotMessage // Keep track of snapshot messages sent during snapshot process
 	snapshotmessages map[string]int
-	//SnMessage map[string]map[int]bool
+	//SnMessage map[string]map[int]int
 }
 
 // A unidirectional communication channel between two servers
@@ -46,7 +47,7 @@ func NewServer(id string, tokens int, sim *Simulator) *Server {
 		make(map[int]*SnapshotState),
 		//make([]*SnapshotMessage, 0),
 		make(map[string]int),
-		//make(map[string]map[int]bool),
+		//make(map[string]map[int]int),
 	}
 }
 
@@ -126,11 +127,13 @@ func (server *Server) handleTokenMessage(sender string, tokenMsg TokenMessage) {
 		println("dinal")
 		println(state.messages)
 		println(server.Id)
-		key := sender
+		//key := sender
 
-		// Try the Boolean operation of Mapp
-		//z := server.SnMessage[sender][state.id]
-		//if z {
+		Str := strconv.Itoa(state.id)
+		Str = Str + "~" + sender
+
+		//// Try the Boolean operation of Mapp
+		//if _, z := server.SnMessage[sender][state.id]; !z {
 		//	snapshotMsg := &SnapshotMessage{
 		//		src:     sender,
 		//		dest:    server.Id,
@@ -138,10 +141,11 @@ func (server *Server) handleTokenMessage(sender string, tokenMsg TokenMessage) {
 		//	}
 		//	// Append the new snapshot message to the snapshot state
 		//	state.messages = append(state.messages, snapshotMsg)
+		//
 		//}
 
 		// Check if a message from this sender already exists in the snapshot state
-		if _, exists := server.snapshotmessages[key]; !exists {
+		if _, exists := server.snapshotmessages[Str]; !exists {
 			// Create a new snapshot message from the token message
 			snapshotMsg := &SnapshotMessage{
 				src:     sender,
@@ -167,11 +171,15 @@ func (server *Server) handleMarkerMessage(sender string, markerMsg MarkerMessage
 
 	//fmt.Println("marker message handling")
 
-	keys := sender
-	server.snapshotmessages[keys] = 0
+	// Create a unique ID of maps
+	Str := strconv.Itoa(snapshotID)
+	Str = Str + "~" + sender
+
+	//keys := sender
+	server.snapshotmessages[Str] = 0
 
 	/////try the Boolean version of Mapp
-	//server.SnMessage[sender][snapshotID] = true
+	//server.SnMessage[sender][snapshotID] = 0
 
 }
 
