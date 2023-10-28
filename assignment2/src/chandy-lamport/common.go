@@ -74,11 +74,15 @@ type SentMessageEvent struct {
 }
 
 func (m SentMessageEvent) String() string {
+	fmt.Println("print this")
 	switch msg := m.message.(type) {
 	case TokenMessage:
 		return fmt.Sprintf("%v sent %v tokens to %v", m.src, msg.numTokens, m.dest)
+
 	case MarkerMessage:
+		//fmt.Println("print this")
 		return fmt.Sprintf("%v sent marker(%v) to %v", m.src, msg.snapshotId, m.dest)
+
 	}
 	return fmt.Sprintf("Unrecognized message: %v", m.message)
 }
@@ -86,7 +90,7 @@ func (m SentMessageEvent) String() string {
 // A message that signifies the beginning of the snapshot process on a particular server.
 // This is used only for debugging that is not sent between servers.
 type StartSnapshot struct {
-	serverId string
+	serverId   string
 	snapshotId int
 }
 
@@ -97,7 +101,7 @@ func (m StartSnapshot) String() string {
 // A message that signifies the end of the snapshot process on a particular server.
 // This is used only for debugging that is not sent between servers.
 type EndSnapshot struct {
-	serverId string
+	serverId   string
 	snapshotId int
 }
 
@@ -133,7 +137,7 @@ type SnapshotMessage struct {
 // State recorded during the snapshot process
 type SnapshotState struct {
 	id       int
-	tokens   map[string]int // key = server ID, value = num tokens
+	tokens   map[string]int
 	messages []*SnapshotMessage
 }
 
