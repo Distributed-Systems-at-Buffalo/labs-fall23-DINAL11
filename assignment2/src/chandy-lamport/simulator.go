@@ -20,17 +20,18 @@ const maxDelay = 5
 // The simulator is responsible for starting the snapshot process, inducing servers
 // to pass tokens to each other, and collecting the snapshot state after the process
 // has terminated.
+
 type Simulator struct {
 	time           int
 	nextSnapshotId int
 	servers        map[string]*Server
 	logger         *Logger
 	// TODO: ADD MORE FIELDS HERE
-	snapshotState    map[string][]*SnapshotMessage // key = server ID
-	snapshotComplete bool
-	allch            map[int]chan string
-	mu               sync.Mutex // Mutex for concurrent access
-
+	Final map[int]map[string]chan bool
+	//snapshotState map[string][]*SnapshotMessage // key = server ID
+	//snapshotComplete bool
+	//allch map[int]chan string
+	//mu    sync.Mutex // Mutex for concurrent access
 }
 
 func NewSimulator() *Simulator {
@@ -39,27 +40,30 @@ func NewSimulator() *Simulator {
 		0,
 		make(map[string]*Server),
 		NewLogger(),
-		make(map[string][]*SnapshotMessage),
-		false,
-		make(map[int]chan string),
-		sync.Mutex{}, // Initialize the mutex
+		make(map[int]map[string]chan bool),
+		//false,
+		//make(map[int]chan string),
+		//sync.Mutex{}, // Initialize the mutex
 	}
 }
 
 // Return the receive time of a message after adding a random delay.
 // Note: since we only deliver one message to a given server at each time step,
 // the message may be received after the time step returned in this function.
+
 func (sim *Simulator) GetReceiveTime() int {
 	return sim.time + 1 + rand.Intn(5)
 }
 
 // Add a server to this simulator with the specified number of starting tokens
+
 func (sim *Simulator) AddServer(id string, tokens int) {
 	server := NewServer(id, tokens, sim)
 	sim.servers[id] = server
 }
 
 // Add a unidirectional link between two servers
+
 func (sim *Simulator) AddForwardLink(src string, dest string) {
 	server1, ok1 := sim.servers[src]
 	server2, ok2 := sim.servers[dest]
@@ -73,16 +77,17 @@ func (sim *Simulator) AddForwardLink(src string, dest string) {
 }
 
 // Run an event in the system
+
 func (sim *Simulator) InjectEvent(event interface{}) {
 	switch event := event.(type) {
 	case PassTokenEvent:
 		src := sim.servers[event.src]
 		src.SendTokens(event.tokens, event.dest)
-		//fmt.Printf("Injected PassTokenEvent: src=%s, dest=%s, tokens=%d\n", event.src, event.dest, event.tokens)
+		fmt.Printf("Injected PassTokenEvent: src=%s, dest=%s, tokens=%d\n", event.src, event.dest, event.tokens)
 
 	case SnapshotEvent:
 		sim.StartSnapshot(event.serverId)
-		//fmt.Printf("Injected SnapshotEvent: serverId=%s\n", event.serverId)
+		fmt.Printf("Injected SnapshotEvent: serverId=%s\n", event.serverId)
 
 	default:
 		log.Fatal("Error unknown event: ", event)
@@ -91,9 +96,10 @@ func (sim *Simulator) InjectEvent(event interface{}) {
 
 // Advance the simulator time forward by one step, handling all send message events
 // that expire at the new time step, if any.
+
 func (sim *Simulator) Tick() {
 	sim.time++
-	fmt.Printf("Time Step: %d\n", sim.time)
+	//fmt.Printf("Time Step: %d\n", sim.time)
 
 	sim.logger.NewEpoch()
 	// Note: to ensure deterministic ordering of packet delivery across the servers,
@@ -111,7 +117,7 @@ func (sim *Simulator) Tick() {
 			if !link.events.Empty() {
 				//fmt.Println("donot reach here")
 				e := link.events.Peek().(SendMessageEvent)
-				//fmt.Printf("Next event from %s to %s: receiveTime=%d, message=%v\n", e.src, e.dest, e.receiveTime, e.message)
+				fmt.Printf("Next event from %s to %s: receiveTime=%d, message=%v\n", e.src, e.dest, e.receiveTime, e.message)
 
 				if e.receiveTime <= sim.time {
 					link.events.Pop()
@@ -130,79 +136,146 @@ func (sim *Simulator) Tick() {
 }
 
 // Start a new snapshot process at the specified server
+
 func (sim *Simulator) StartSnapshot(serverId string) {
 	snapshotId := sim.nextSnapshotId
 	sim.nextSnapshotId++
-	sim.logger.RecordEvent(sim.servers[serverId], StartSnapshot{serverId, snapshotId})
 
 	// TODO: IMPLEMENT ME
+	// #1 initialize the Channel Map map by making the new string channel map
+	// and iterate throught the servers in simulator to initilaize the boolean channel
+	channelMap := make(map[string]chan bool)
+	for serId, _ := range sim.servers {
+		channelMap[serId] = make(chan bool)
+	}
 
-	// Start the snapshot process on the specified server
-	server := sim.servers[serverId]
+	// #2 assign the channelMap to Final simulator
+	sim.Final[snapshotId] = channelMap
+
+	// #3 Iterate through the servers map in simulator, check if the servers are legit and if not return the process
+	// and throw Fatal error
+	server, legit := sim.servers[serverId]
+	if legit == false {
+		// Error: Server ID doesn't exist
+		log.Fatalf("Error: Server ID '%s' doesn't exist.\n", serverId)
+		return
+	}
+
+	// #3 Start the snapshot process on the specified server
 	server.StartSnapshot(snapshotId)
-	//fmt.Printf("Started snapshot %d at server: %s\n", snapshotId, serverId)
+	fmt.Printf("Started snapshot %d at server: %s\n", snapshotId, serverId)
+
+	// #4 also record the event of calling the startsnapshot in simulator to calling the startsnapshot in server
+	sim.logger.RecordEvent(server, StartSnapshot{serverId, snapshotId})
 
 }
 
 // Callback for servers to notify the simulator that the snapshot process has
 // completed on a particular server
+
 func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 	sim.logger.RecordEvent(sim.servers[serverId], EndSnapshot{serverId, snapshotId})
 	// TODO: IMPLEMENT ME
 
-	// Check if the channel for the snapshotID exists
-	sim.allch[snapshotId] = func() chan string {
-		ch, exists := sim.allch[snapshotId]
+	// NotifySnapshotComplete function is called once the Marker message are received from all the
+	// inboundlinks concerned to that server, changed the location from server.startsnapshot to handleMarkermessage
+
+	// #1
+	// Check if the channel for the snapshotID linked with the serverId exists or not,
+	// if doesn't exist return the function
+	sim.Final[snapshotId][serverId] = func() chan bool {
+		ch, exists := sim.Final[snapshotId][serverId]
 		if exists {
 			return ch
 		}
-		return make(chan string, 40)
+		fmt.Printf("The Final channel with the %d and %s doens't exist\n", snapshotId, serverId)
+		return make(chan bool)
 	}()
-	//fmt.Printf("Snapshot %d completed at server: %s\n", snapshotId, serverId)
 
-	// Send the serverID through the channel to signal completion
-	sim.allch[snapshotId] <- serverId
+	// #2 Iterate through the servers map in simulator, check if the servers are legit and if not return the process
+	// and throw Fatal error
+	_, legit := sim.servers[serverId]
+	if legit == false {
+		// Error: Server ID doesn't exist
+		log.Fatalf("Error: Server ID '%s' doesn't exist.\n", serverId)
+		return
+	}
+
+	// #3 Send the [serverID] boolean now, through the channel to signal completion of the snapshot
+	sim.Final[snapshotId][serverId] <- true
+
+	// Print the snapshot completion of the snapshotID linked with that serverId
+	fmt.Printf("Snapshot %d completed at server: %s\n", snapshotId, serverId)
 }
 
 // CollectSnapshot collects and merges snapshot state from all the servers.
 // This function blocks until the snapshot process has completed on all servers.
+
 func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
-	snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
-	//// TODO: IMPLEMENT ME
+	//snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
+	//// TODO: IMPLEMENT METHOD
 
 	println("call collectsnapshot")
-	for range sim.servers {
-		<-sim.allch[snapshotId]
-		//fmt.Printf("Received snapshot completion signal from a server %s.\n ", Server{Id: })
+
+	// Get the total number of channels in the snapshot state for the specified snapshot ID
+	totalChannels := len(sim.Final[snapshotId])
+
+	// Use a sync.WaitGroup to wait for all goroutines to complete
+	var wg sync.WaitGroup
+
+	// Increment the WaitGroup counter
+	wg.Add(totalChannels)
+
+	// Iterate through the channels and start goroutines for synchronization
+	for _, v := range sim.Final[snapshotId] {
+		go func(ch chan bool) {
+			defer wg.Done()
+			// Wait for the signal from the channel
+			<-ch
+		}(v)
 	}
 
-	// Merge snapshot state from all servers
-	//snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
+	// Wait until all goroutines are done
+	wg.Wait()
+
+	fmt.Printf("Received snapshot completion signal for SnapshotID %d.\n ", snapshotId)
+
+	token := make(map[string]int)
+	messages := make([]*SnapshotMessage, 0)
+
+	// Iterate through the servers
 	for _, server := range sim.servers {
-		serverSnapshot := server.snapshotstates[snapshotId]
-		for id, token := range serverSnapshot.tokens {
-			snap.tokens[id] = token
+		// Retrieve the snapshot state for the specified snapshot ID
+		if snapshot, found := server.snapState.Load(snapshotId); found {
+			// Check if the snapshot is of type *Snapshot
+			if snapshot, ok := snapshot.(*Snapshot); ok {
+				// Extract tokens and messages from the snapshot and store them in respective maps
+				token[server.Id] = snapshot.tokens
+				messages = append(messages, snapshot.messages...)
+			}
 		}
-		snap.messages = append(snap.messages, serverSnapshot.messages...)
 	}
+
+	snap := SnapshotState{snapshotId, token, messages}
 
 	println("collect snapshot complete")
+
 	return &snap
 }
 
 // RecordSnapshotMessage records a snapshot message for a server in the snapshot state
-func (sim *Simulator) RecordSnapshotMessage(src string, dest string, message interface{}) {
-
-	snapMessage := &SnapshotMessage{src, dest, message}
-	serverMessages, ok := sim.snapshotState[dest]
-	if !ok {
-		serverMessages = []*SnapshotMessage{snapMessage}
-	} else {
-		serverMessages = append(serverMessages, snapMessage)
-	}
-	//added new
-	sim.snapshotState[dest] = serverMessages
-
-	fmt.Printf("Recorded snapshot message: %s -> %s: %v\n", src, dest, message)
-
-}
+//func (sim *Simulator) RecordSnapshotMessage(src string, dest string, message interface{}) {
+//
+//	snapMessage := &SnapshotMessage{src, dest, message}
+//	serverMessages, ok := sim.snapshotState[dest]
+//	if !ok {
+//		serverMessages = []*SnapshotMessage{snapMessage}
+//	} else {
+//		serverMessages = append(serverMessages, snapMessage)
+//	}
+//	//added new
+//	sim.snapshotState[dest] = serverMessages
+//
+//	fmt.Printf("Recorded snapshot message: %s -> %s: %v\n", src, dest, message)
+//
+//}
