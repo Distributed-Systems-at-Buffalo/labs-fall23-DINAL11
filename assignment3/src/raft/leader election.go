@@ -30,6 +30,7 @@ func (rf *Raft) initialelection() {
 	currentTerm := rf.currentTerm
 	candidateID := rf.me
 	//rf.mu.Unlock()
+
 	lastLogIndex := rf.getLastLogIndex()
 	lastLogTerm := rf.getLastLogTerm()
 
