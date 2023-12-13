@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"sync"
 )
 
 // Max random delay added to packet delivery
@@ -28,6 +27,7 @@ type Simulator struct {
 	logger         *Logger
 	// TODO: ADD MORE FIELDS HERE
 	Final map[int]map[string]chan bool
+	ss    map[int]chan string
 	//snapshotState map[string][]*SnapshotMessage // key = server ID
 	//snapshotComplete bool
 	//allch map[int]chan string
@@ -41,6 +41,7 @@ func NewSimulator() *Simulator {
 		make(map[string]*Server),
 		NewLogger(),
 		make(map[int]map[string]chan bool),
+		make(map[int]chan string),
 		//false,
 		//make(map[int]chan string),
 		//sync.Mutex{}, // Initialize the mutex
@@ -200,6 +201,11 @@ func (sim *Simulator) NotifySnapshotComplete(serverId string, snapshotId int) {
 		log.Fatalf("Error: Server ID '%s' doesn't exist.\n", serverId)
 		return
 	}
+	//newly added
+	//if len(sim.ss[snapshotId]) == len(sim.Final[snapshotId]){
+	//	sim.Final[snapshotId][serverId] <- true
+	//
+	//}
 
 	// #3 Send the [serverID] boolean now, through the channel to signal completion of the snapshot
 	sim.Final[snapshotId][serverId] <- true
@@ -215,52 +221,52 @@ func (sim *Simulator) CollectSnapshot(snapshotId int) *SnapshotState {
 	//snap := SnapshotState{snapshotId, make(map[string]int), make([]*SnapshotMessage, 0)}
 	//// TODO: IMPLEMENT METHOD
 
-	println("call collectsnapshot")
-
+	//
 	// Get the total number of channels in the snapshot state for the specified snapshot ID
 	totalChannels := len(sim.Final[snapshotId])
 
-	// Use a sync.WaitGroup to wait for all goroutines to complete
-	var wg sync.WaitGroup
+	// Create a counter to keep track of completed servers
+	completedServers := 0
 
-	// Increment the WaitGroup counter
-	wg.Add(totalChannels)
+	// Iterate through the channels and wait for completion signals
+	for serverID, ch := range sim.Final[snapshotId] {
+		// Wait for the signal from the channel
+		<-ch
 
-	// Iterate through the channels and start goroutines for synchronization
-	for _, v := range sim.Final[snapshotId] {
-		go func(ch chan bool) {
-			defer wg.Done()
-			// Wait for the signal from the channel
-			<-ch
-		}(v)
+		// Increment the completedServers counter
+		completedServers++
+
+		// Print the snapshot completion of the snapshotID linked with that serverId
+		fmt.Printf("Snapshot %d completed at server: %s\n", snapshotId, serverID)
 	}
 
-	// Wait until all goroutines are done
-	wg.Wait()
+	// Check if all servers have completed the snapshot process
+	if completedServers == totalChannels {
+		token := make(map[string]int)
+		messages := make([]*SnapshotMessage, 0)
 
-	fmt.Printf("Received snapshot completion signal for SnapshotID %d.\n ", snapshotId)
-
-	token := make(map[string]int)
-	messages := make([]*SnapshotMessage, 0)
-
-	// Iterate through the servers
-	for _, server := range sim.servers {
-		// Retrieve the snapshot state for the specified snapshot ID
-		if snapshot, found := server.snapState.Load(snapshotId); found {
-			// Check if the snapshot is of type *Snapshot
-			if snapshot, ok := snapshot.(*Snapshot); ok {
-				// Extract tokens and messages from the snapshot and store them in respective maps
-				token[server.Id] = snapshot.tokens
-				messages = append(messages, snapshot.messages...)
+		// Iterate through the servers
+		for _, server := range sim.servers {
+			// Retrieve the snapshot state for the specified snapshot ID
+			if snapshot, found := server.snapState.Load(snapshotId); found {
+				// Check if the snapshot is of type *Snapshot
+				if snapshot, ok := snapshot.(*Snapshot); ok {
+					// Extract tokens and messages from the snapshot and store them in respective maps
+					token[server.Id] = snapshot.tokens
+					messages = append(messages, snapshot.messages...)
+				}
 			}
 		}
+
+		snap := SnapshotState{snapshotId, token, messages}
+
+		println("collect snapshot complete")
+
+		return &snap
 	}
 
-	snap := SnapshotState{snapshotId, token, messages}
-
-	println("collect snapshot complete")
-
-	return &snap
+	// Return nil if all servers have not completed the snapshot process
+	return nil
 }
 
 // RecordSnapshotMessage records a snapshot message for a server in the snapshot state
