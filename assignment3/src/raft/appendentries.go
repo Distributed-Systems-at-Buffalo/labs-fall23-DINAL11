@@ -53,6 +53,7 @@ func (rf *Raft) sendAppendEntries(server int, args AppendEntriesArgs, reply *App
 	defer rf.mu.Unlock()
 
 	//time.Sleep(heartbeatInterval)
+	///adding new lines to check the commit on Github
 	return ok
 }
 
